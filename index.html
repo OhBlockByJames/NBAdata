@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<!-- Load d3.js -->
+<script src="https://d3js.org/d3.v4.js"></script>
+<script src="https://d3js.org/d3-selection.v1.min.js"></script>
+
+<body color = "#E6E6F2">
+
+<div>
+
+
+<h3>說明：</h3>
+這是美國NBA得分榜前50名球員(資料取自2019-2020和2020-2021賽季)，透過移動滑鼠，可以和圖表互動並呈現該球員數據(數據位於GITHUB上)
+。以有效命中率作為x軸，場均得分為Y軸，越接近右上的球員代表他的得分高且高效率，反之則越低效。按下按鈕，則能顯示去年數據進行比對。
+因為各球員的場均得分分佈廣，而有效命中率則較為接近，然而為了呈現此資料的密集度，故並未對Label做出更改，如實呈現資料間的差異。
+用2D散佈圖呈現各球員數據。取前五十名的球員比較有代表性，避免因一次顯示過多資料而增加觀看的複雜度，重疊的部分顏色加深，方便區分數據相近者，同時也能直接找出數據最頂尖者。
+<h3>結論:</h3>
+出手數越多者圖型越大，三分命中率高者為紅色，低者為藍色。綜合這兩項來看，能發現三分命中率高的球員通常有較高的eFG(因為三分有加權)。出手數的多寡與得分呈現正相關，與eFG則沒有明顯相關性，這張圖也證明了魔球理論確實影響了NBA整體球風，因為多數擁有高eFG的球員，通常為三分射手或是禁區型球員(得分期望值最高的投籃區域)。
+
+<h3>設計選擇：</h3>
+1.Mark:Point<br>
+呈現確切散佈情形，容易看出離群值和資料點密集處<br>
+<br>
+2.Channel:Position,Size,Color<br>
+(1)Position:<br>
+Vertical position:Quantitative<br>
+Horizontal position:Quantitative<br>
+(2)Size:Area<br>
+面積大小代表該球員每場出手次數。常理而言，出手次數越多的球員，得分會越多(Y值越大)。
+若一個球員出手次數多，得分或命中率低，則會被視為低效的球員。
+<br>
+(3)Color Hue:<br>顏色是用來不同三分命中率。因為根據有效命中率公式，eFG=(總命中球數+0.5三分球命中球數)/總出手數。換言之，三分球命中率高者，eFG會高出以兩分球為主要進攻手段者(有事先篩選掉三分命中少但命中率高者，避免部分禁區球員被誤認成外線球員)。<br>
+顏色的深淺則用來區分不同賽季(時間)球員得分分布情形。<br>
+<br>
+<h3>經驗法則:</h3>
+Overview first, zoom and filter, details on demand:
+先呈現整體資料，滑鼠移過去後才會顯示進階資料。<br>
+Responsiveness is required:
+滑鼠移動到點上顯示進階資料、數字呈現的延遲時間短。<br>
+Use bright and/or dark colors to highlight information that requires greater attention:
+將三分球命中率的顏色區分為亮紅、黃、藍，其中，亮紅色者代表三分命中率高者。
+
+
+    <br>
+    <a href="https://www.basketball-reference.com/leagues/NBA_2021_per_game.html"  title="資料來源">NBA 資料統計</a>
+</div>
+<div id="my_dataviz"></div>
+<div id="option">
+    <input name="updateButton" 
+           type="button" 
+           value="Compared with 2019-2020" 
+           onclick="updateData()" />
+    <input type="button" value = "2020-2021 stats" onclick="history.go(0)" />
+</div>
+
+
+</body>
+<script>
+
+
+var margin = {top: 10, right: 30, bottom: 30, left: 60},
+    width = 460 - margin.left - margin.right,
+    height = 450 - margin.top - margin.bottom;
+
+var svg = d3.select("#my_dataviz")
+  .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform",
+          "translate(" + margin.left + "," + margin.top + ")");
+
+ svg.append("text")
+      .attr("x", 3)
+      .attr("y", 12)
+      .attr("text-anchor", "left")
+      .style("font-size", "15px")
+      .style("fill", "  #000093 ")
+      .style("max-width", 400)
+      .text("Points");
+
+
+ svg.append("text")
+      .attr("x", 260)
+      .attr("y", 407)
+      .attr("text-anchor", "left")
+      .style("font-size", "15px")
+      .style("fill", "#EA0000")
+      .style("max-width", 400)
+      .text(" eFG% 有效命中率");
+
+
+d3.csv("https://raw.githubusercontent.com/OhBlockByJames/NBAdata/main/new.csv", function(data) {
+
+  var x = d3.scaleLinear()
+    .domain([0, 80])
+    .range([ 0, width ]);
+  svg.append("g")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(x));
+
+
+  var y = d3.scaleLinear()
+    .domain([0, 35])
+    .range([ height, 0]);
+  svg.append("g")
+    .call(d3.axisLeft(y));
+
+  var tooltip = d3.select("#my_dataviz")
+    .append("div")
+    .style("opacity", 0.2)
+    .attr("class", "tooltip")
+    .style("background-color", "white")
+    .style("border", "solid")
+    .style("border-width", "1px")
+    .style("border-radius", "5px")
+    .style("padding", "10px")
+
+  var mouseover = function(d) {
+    tooltip
+      .style("background-color", "#FF7575")
+      .style("opacity", 1)
+
+
+  }
+
+  var mousemove = function(d) {
+    tooltip
+      .html("球員:" + d.Player + "|2020-2021得分排行:"+ d.Rk+ "|得分:"+ d.PTS+"|籃板:"+d.TRB+"|助攻:"+d.AST+"|有效投籃命中率:"+
+        d.Efg+"|三分命中率:"+
+        d.THREE+"|兩分命中率:"+
+        d.TWO+"|罰球命中率:"+d.FTP)
+      .style("left", (d3.mouse(this)[0]+90) + "px") 
+      .style("top", (d3.mouse(this)[1]) + "px")
+
+
+  }
+
+  var mouseleave = function(d) {
+    tooltip
+      // .transition()
+      //.duration(200)
+      .style("opacity", 0.3)
+  }
+
+  svg.append('g')
+    .selectAll("dot")
+    .data(data.filter(function(d,i){return i<50}))
+    .enter()
+    .append("circle")
+      .attr("cx", function (d) { return x(d.Efg)*100; } )
+      .attr("cy", function (d) { return y(d.PTS); } )
+      .attr("r", function (d) { return d.FGA/2; })
+      //.attr("r", 5)
+      //.style("fill", "red")
+      .style("opacity", 0.8)
+      .style("stroke", "white")
+      .style("fill", function(d) { 
+            if (d.THREE*100 >= 40 & d.THREEP> 1 ) {return "#EA0000 "} 
+            else if (d.THREE*100 >= 30 & d.THREEP> 1){return "#FFED97 "} 
+            else { return "#0000E3" }
+        ;})
+    .on("mouseover", mouseover )
+    .on("mousemove", mousemove )
+    .on("mouseleave", mouseleave )
+
+  })
+
+function updateData() {
+
+d3.csv("https://raw.githubusercontent.com/OhBlockByJames/NBAdata/main/old.csv", function(data) {
+
+  var x = d3.scaleLinear()
+    .domain([0, 80])
+    .range([ 0, width ]);
+  svg.append("g")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(x));
+
+  // Add Y axis
+  var y = d3.scaleLinear()
+    .domain([0, 35])
+    .range([ height, 0]);
+  svg.append("g")
+    .call(d3.axisLeft(y));
+
+  var tooltip = d3.select("#my_dataviz")
+    .append("div")
+    .style("opacity", 0)
+    .attr("class", "tooltip")
+    .style("background-color", "white")
+    .style("border", "solid")
+    .style("border-width", "1px")
+    .style("border-radius", "5px")
+    .style("padding", "10px")
+
+
+  var mouseover = function(d) {
+    tooltip
+      .style("opacity", 1)
+
+
+  }
+
+  var mousemove = function(d) {
+    tooltip
+      .html("球員:" + d.Player + "|2019-2020得分排行:"+ d.Rk+ "|得分:"+ d.PTS+"|籃板:"+d.TRB+"|助攻:"+d.AST+"|有效投籃命中率:"+
+        d.Efg+"|三分命中率:"+
+        d.THREE+"|兩分命中率:"+
+        d.TWO+"|罰球命中率:"+d.FTP)
+      .style("left", (d3.mouse(this)[0]+90) + "px") 
+      .style("top", (d3.mouse(this)[1]) + "px")
+  }
+
+  var mouseleave = function(d) {
+    tooltip
+      //.transition()
+      //.duration(200)
+      .style("background-color", "#9393FF")
+      .style("opacity", 0.3)
+  }
+
+  svg.append('g')
+    .selectAll("dot")
+    .data(data.filter(function(d,i){return i<50}))
+    .enter()
+    .append("circle")
+      .attr("cx", function (d) { return x(d.Efg)*100; } )
+      .attr("cy", function (d) { return y(d.PTS); } )
+      .attr("r", function (d) { return d.FGA/2; })
+      //.style("fill", "blue")
+        .style("fill", function(d) { 
+        if (d.THREE*100 >= 40 & d.THREEP> 1 ) {return "#FF0000 "} 
+        else if (d.THREE*100 >= 30 & d.THREEP> 1){return "#FFE153 "} 
+        else { return "#003D79" }
+        ;})
+      .style("opacity", 0.3)
+      .style("stroke", "black")
+    .on("mouseover", mouseover )
+    .on("mousemove", mousemove )
+    .on("mouseleave", mouseleave )
+
+  })
+}
+
+
+
+
+</script>
